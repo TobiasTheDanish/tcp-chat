@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 
@@ -16,40 +15,19 @@ func main() {
 	}
 
 	// Resolve the string address to a TCP address
-	tcpAddr, err := client.ResolveAddr(os.Args[1])
-
+	tcpClient, err := client.Connect(os.Args[1])
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 
-	// Connect to the address with tcp
-	conn, err := client.Connect(tcpAddr)
-
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	go tcpClient.Listen()
 
 	for {
-		// Read from the connection untill a new line is send
-		data, err := client.ReadLine(conn)
+		err := tcpClient.ReadWrite(os.Stdin)
 		if err != nil {
-			fmt.Println(err)
+			fmt.Println("ERROR reading from stdin: ", err)
 			return
 		}
-
-		// Print the data read from the connection to the terminal
-		fmt.Print("> ", string(data))
-
-		reader := bufio.NewReader(os.Stdin)
-		fmt.Print("> ")
-		text, err := reader.ReadString('\n')
-		if err != nil {
-			fmt.Print("ERROR: ", err)
-			return
-		}
-
-		conn.Write([]byte(text))
 	}
 }
