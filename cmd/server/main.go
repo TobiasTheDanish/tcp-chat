@@ -14,7 +14,7 @@ func main() {
 	}
 	port := os.Args[1]
 
-	err := server.Listen(port)
+	err := tcp_server.Start(port)
 	if err != nil {
 		fmt.Println("ERROR: ", err)
 	}

@@ -1,4 +1,4 @@
-package server
+package tcp_server
 
 import (
 	"bufio"
@@ -14,7 +14,7 @@ type server struct {
 	conns []net.Conn
 }
 
-func Listen(port string) error {
+func Start(port string) error {
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", fmt.Sprintf("0.0.0.0:%s", port))
 
 	if err != nil {
