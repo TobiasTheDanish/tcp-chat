@@ -15,7 +15,7 @@ func main() {
 	}
 
 	// Resolve the string address to a TCP address
-	tcpClient, err := client.Connect(os.Args[1])
+	tcpClient, err := tcp_client.Connect(os.Args[1])
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
