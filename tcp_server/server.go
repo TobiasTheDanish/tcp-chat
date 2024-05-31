@@ -1,29 +1,30 @@
 package tcp_server
 
 import (
-	"bufio"
 	"fmt"
-	"io"
 	"net"
-	"strings"
 
+	"github.com/TobiasTheDanish/tcp-chat/shared"
 	"github.com/TobiasTheDanish/tcp-chat/tcp_server/internal/ip"
 )
 
-type server struct {
-	conns []net.Conn
+type ConnectionHandler func(net.Conn, chan *shared.Packet)
+
+type Server struct {
+	Conns []net.Conn
+	PChan chan *shared.Packet
 }
 
-func Start(port string) error {
+func Start(port string, handler ConnectionHandler) (*Server, error) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", fmt.Sprintf("0.0.0.0:%s", port))
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	ip, err := ip.ExternalIP()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	fmt.Printf("Connect here: %s:%s\n", ip, port)
@@ -31,23 +32,19 @@ func Start(port string) error {
 	listener, err := net.ListenTCP("tcp", tcpAddr)
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	s := server{conns: make([]net.Conn, 0)}
-	channel := make(chan string)
-	go s.accept(listener, channel)
-
-	for str := range channel {
-		fmt.Printf("%s", str)
-		for i := range len(s.conns) {
-			s.conns[i].Write([]byte(str))
-		}
+	s := &Server{
+		Conns: make([]net.Conn, 0),
+		PChan: make(chan *shared.Packet),
 	}
-	return nil
+	go s.accept(listener, handler)
+
+	return s, nil
 }
 
-func (s *server) accept(listener *net.TCPListener, c chan string) {
+func (s *Server) accept(listener *net.TCPListener, handler ConnectionHandler) {
 	for {
 		// Accept new connections
 		conn, err := listener.Accept()
@@ -55,45 +52,9 @@ func (s *server) accept(listener *net.TCPListener, c chan string) {
 			fmt.Println(err)
 			return
 		}
-		s.conns = append(s.conns, conn)
+		s.Conns = append(s.Conns, conn)
 		fmt.Printf("New connection from Local IP: %s\n", conn.LocalAddr().String())
 		// Handle new connections in a Goroutine for concurrency
-		go HandleConnection(conn, c)
-	}
-}
-
-func HandleConnection(conn net.Conn, c chan string) {
-	defer conn.Close()
-	connIp := conn.LocalAddr().String()
-	reader := bufio.NewReader(conn)
-
-	conn.Write([]byte("Welcome! What is your username?\n"))
-	username, err := reader.ReadString('\n')
-	if err != nil {
-		if err == io.EOF {
-			fmt.Printf("Connection to %s closed\n", connIp)
-		} else {
-			fmt.Printf("ERROR: %s\n", err)
-		}
-		return
-	}
-	username = strings.Trim(username, "\r\n \t")
-
-	for {
-		// Read from the connection untill a new line is send
-		data, err := reader.ReadString('\n')
-		if err != nil {
-			if err == io.EOF {
-				fmt.Printf("Connection to %s closed\n", username)
-			} else {
-				fmt.Printf("ERROR: %s\n", err)
-			}
-			return
-		}
-
-		message := fmt.Sprintf("%s> %s", username, data)
-		// Print the data read from the connection to the terminal
-		// fmt.Printf(message)
-		c <- message
+		go handler(conn, s.PChan)
 	}
 }

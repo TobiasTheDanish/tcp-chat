@@ -24,7 +24,7 @@ func main() {
 	go tcpClient.Listen()
 
 	for {
-		err := tcpClient.ReadWrite(os.Stdin)
+		err := tcpClient.ReadSend(os.Stdin)
 		if err != nil {
 			fmt.Println("ERROR reading from stdin: ", err)
 			return

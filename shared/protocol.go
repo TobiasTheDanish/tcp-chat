@@ -40,6 +40,12 @@ func (p *Packet) Encode() []byte {
 	return bytes
 }
 
+func (p *Packet) VersionString() string {
+	minor := p.Header.Version & 0x0f
+	major := p.Header.Version >> 4
+	return fmt.Sprintf("%d.%d", major, minor)
+}
+
 func PacketFromData(data []byte) (*Packet, error) {
 	// store major version in the 4 most significant bits
 	// and minor version in the 4 least significant bits
@@ -72,7 +78,7 @@ func ParsePacket(reader *bufio.Reader) (*Packet, error) {
 
 	header := PacketHeader{
 		Version:    version,
-		DataLength: uint16(headerBytes[1] | headerBytes[2]),
+		DataLength: uint16((headerBytes[1] << 4) | headerBytes[2]),
 	}
 
 	data, err := readBytes(int(header.DataLength), reader)

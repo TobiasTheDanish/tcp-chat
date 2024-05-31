@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+
+	"github.com/TobiasTheDanish/tcp-chat/shared"
 )
 
 type Client struct {
@@ -26,43 +28,50 @@ func Connect(addr string) (*Client, error) {
 	return &Client{addr: tcpAddr, conn: tcpConn}, nil
 }
 
-func (c *Client) Write(bytes []byte) error {
-	_, err := c.conn.Write(bytes)
-	return err
-}
-
-func (c *Client) ReadLine() (string, error) {
-	data, err := bufio.NewReader(c.conn).ReadString('\n')
+func (c *Client) ReadPacket() (*shared.Packet, error) {
+	data, err := shared.ParsePacket(bufio.NewReader(c.conn))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	return data, nil
 }
 
-func (c *Client) ReadWrite(r io.Reader) error {
+func (c *Client) ReadSend(r io.Reader) error {
 	reader := bufio.NewReader(r)
-	fmt.Print("> ")
+	// fmt.Print("> ")
 	text, err := reader.ReadString('\n')
 	if err != nil {
 		return err
 	}
 
-	c.Write([]byte(text))
+	return c.SendBytes([]byte(text))
+}
 
-	return nil
+func (c *Client) SendPacket(p *shared.Packet) error {
+	_, err := c.conn.Write(p.Encode())
+	return err
+}
+
+func (c *Client) SendBytes(bytes []byte) error {
+	p, err := shared.PacketFromData(bytes)
+	if err != nil {
+		return err
+	}
+
+	return c.SendPacket(p)
 }
 
 func (c *Client) Listen() {
 	for {
 		// Read from the connection untill a new line is send
-		data, err := c.ReadLine()
+		packet, err := c.ReadPacket()
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 
 		// Print the data read from the connection to the terminal
-		fmt.Print("> ", string(data))
+		fmt.Print(string(packet.Data))
 	}
 }
