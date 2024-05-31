@@ -1,4 +1,4 @@
-package tcp_server
+package shared_test
 
 import (
 	"bufio"
@@ -6,14 +6,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/TobiasTheDanish/tcp-chat/tcp_server"
+	"github.com/TobiasTheDanish/tcp-chat/shared"
 )
 
 func TestPacketFromData(t *testing.T) {
 	data := []byte("Hello world")
 	dataLen := len(data)
 
-	packet, err := tcp_server.PacketFromData(data)
+	packet, err := shared.PacketFromData(data)
 	if err != nil {
 		t.Errorf("Didn't expect error, got: %s\n", err)
 	}
@@ -21,8 +21,8 @@ func TestPacketFromData(t *testing.T) {
 	minor := packet.Header.Version & 0x0f
 	major := packet.Header.Version >> 4
 
-	if major != tcp_server.MAJOR_VERSION || minor != tcp_server.MINOR_VERSION {
-		t.Errorf("Invalid version, expected: %d.%d, got: %d.%d", tcp_server.MAJOR_VERSION, tcp_server.MINOR_VERSION, major, minor)
+	if major != shared.MAJOR_VERSION || minor != shared.MINOR_VERSION {
+		t.Errorf("Invalid version, expected: %d.%d, got: %d.%d", shared.MAJOR_VERSION, shared.MINOR_VERSION, major, minor)
 	}
 
 	if packet.Header.DataLength != uint16(dataLen) {
@@ -33,16 +33,16 @@ func TestPacketFromData(t *testing.T) {
 		t.Errorf("Expected data to be: \"%s\", got: \"%s\"\n", data, packet.Data)
 	}
 
-	tooBigData := make([]byte, tcp_server.MAX_DATA_LEN+10)
+	tooBigData := make([]byte, shared.MAX_DATA_LEN+10)
 
-	_, err = tcp_server.PacketFromData(tooBigData)
+	_, err = shared.PacketFromData(tooBigData)
 	if err == nil {
 		t.Errorf("Expected to error with too big data, but didn't")
 	}
 }
 
 func TestEncode(t *testing.T) {
-	packet, _ := tcp_server.PacketFromData([]byte("Hello world"))
+	packet, _ := shared.PacketFromData([]byte("Hello world"))
 	b := packet.Encode()
 
 	if b[0] != packet.Header.Version {
@@ -65,11 +65,11 @@ func TestEncode(t *testing.T) {
 
 func TestParsePacket(t *testing.T) {
 	helloWorld := []byte("Hello world")
-	packet, _ := tcp_server.PacketFromData(helloWorld)
+	packet, _ := shared.PacketFromData(helloWorld)
 
 	reader := bufio.NewReader(bytes.NewReader(packet.Encode()))
 
-	parsed, err := tcp_server.ParsePacket(reader)
+	parsed, err := shared.ParsePacket(reader)
 	if err != nil {
 		t.Errorf("Didn't expect error, got: %s\n", err)
 	}
@@ -86,8 +86,8 @@ func TestParsePacket(t *testing.T) {
 		t.Errorf("Expected data to be: \"%s\", got: \"%s\"\n", packet.Data, parsed.Data)
 	}
 
-	errPacket := *&tcp_server.Packet{
-		Header: tcp_server.PacketHeader{
+	errPacket := *&shared.Packet{
+		Header: shared.PacketHeader{
 			Version:    0,
 			DataLength: uint16(len(helloWorld)),
 		},
@@ -95,7 +95,7 @@ func TestParsePacket(t *testing.T) {
 	}
 
 	reader = bufio.NewReader(bytes.NewReader(errPacket.Encode()))
-	parsed, err = tcp_server.ParsePacket(reader)
+	parsed, err = shared.ParsePacket(reader)
 	if err == nil {
 		t.Errorf("Expected to error with too big data, but didn't")
 	}
