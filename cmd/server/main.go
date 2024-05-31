@@ -19,7 +19,9 @@ func main() {
 	}
 	port := os.Args[1]
 
-	server, err := tcp_server.Start(port, HandleConnection)
+	server := tcp_server.Create(handleConnection)
+
+	err := server.Start(port)
 	if err != nil {
 		fmt.Println("ERROR: ", err)
 	}
@@ -32,7 +34,7 @@ func main() {
 	}
 }
 
-func HandleConnection(conn net.Conn, c chan *shared.Packet) {
+func handleConnection(conn net.Conn, c chan *shared.Packet) {
 	defer conn.Close()
 	connIp := conn.LocalAddr().String()
 	reader := bufio.NewReader(conn)
