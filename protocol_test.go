@@ -3,6 +3,7 @@ package shared_test
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -147,4 +148,34 @@ func TestParsePacket(t *testing.T) {
 	if !bytes.Equal(packet.Data, parsed.Data) {
 		t.Errorf("Expected data to be: \"%s\", got: \"%s\"\n", packet.Data, parsed.Data)
 	}
+}
+
+type testStruct struct {
+	name string
+	age  uint32
+	data struct {
+		fame int16
+	}
+}
+
+func TestPacketFromType(t *testing.T) {
+	test := testStruct{
+		name: "Tobias",
+		age:  14,
+		data: struct {
+			fame int16
+		}{
+			fame: -16,
+		},
+	}
+	packet, err := shared.PacketFromType(test)
+	if err != nil {
+		t.Errorf("Did not expect error, but got: %s", err)
+	}
+
+	if packet == nil {
+		t.Error("Expected packet but got nil")
+	}
+
+	fmt.Println("DataLength: ", packet.Header.DataLength)
 }
