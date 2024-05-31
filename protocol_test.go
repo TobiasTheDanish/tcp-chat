@@ -39,6 +39,28 @@ func TestPacketFromData(t *testing.T) {
 	if err == nil {
 		t.Errorf("Expected to error with too big data, but didn't")
 	}
+
+	byteArr := []byte{16, 0, 7, 84, 111, 98, 105, 97, 115, 62, 32, 16, 0, 6, 72, 101, 108, 108, 111, 10}
+	packet, err = shared.PacketFromData(byteArr)
+
+	if err != nil {
+		t.Errorf("Didn't expect error, got: %s\n", err)
+	}
+
+	minor = packet.Header.Version & 0x0f
+	major = packet.Header.Version >> 4
+
+	if major != shared.MAJOR_VERSION || minor != shared.MINOR_VERSION {
+		t.Errorf("Invalid version, expected: %d.%d, got: %d.%d", shared.MAJOR_VERSION, shared.MINOR_VERSION, major, minor)
+	}
+
+	if packet.Header.DataLength != uint16(len(byteArr)) {
+		t.Errorf("Expected dataLength header to be: %d, got: %d\n", dataLen, packet.Header.DataLength)
+	}
+
+	if !bytes.Equal(byteArr, packet.Data) {
+		t.Errorf("Expected data to be: \"%s\", got: \"%s\"\n", byteArr, packet.Data)
+	}
 }
 
 func TestEncode(t *testing.T) {
@@ -97,6 +119,32 @@ func TestParsePacket(t *testing.T) {
 	reader = bufio.NewReader(bytes.NewReader(errPacket.Encode()))
 	parsed, err = shared.ParsePacket(reader)
 	if err == nil {
-		t.Errorf("Expected to error with too big data, but didn't")
+		t.Errorf("Expected to error with invalid version, but didn't")
+	}
+
+	byteArr := []byte{16, 0, 7, 84, 111, 98, 105, 97, 115, 62, 32, 16, 0, 6, 72, 101, 108, 108, 111, 10}
+	packet, err = shared.PacketFromData(byteArr)
+
+	if err != nil {
+		t.Errorf("Didn't expect error, got: %s\n", err)
+	}
+
+	reader = bufio.NewReader(bytes.NewReader(packet.Encode()))
+
+	parsed, err = shared.ParsePacket(reader)
+	if err != nil {
+		t.Errorf("Didn't expect error, got: %s\n", err)
+	}
+
+	if parsed.Header.Version != packet.Header.Version {
+		t.Errorf("Version mismatch between parsed and provided packet")
+	}
+
+	if parsed.Header.DataLength != uint16(packet.Header.DataLength) {
+		t.Errorf("Expected dataLength header to be: %d, got: %d\n", packet.Header.DataLength, parsed.Header.DataLength)
+	}
+
+	if !bytes.Equal(packet.Data, parsed.Data) {
+		t.Errorf("Expected data to be: \"%s\", got: \"%s\"\n", packet.Data, parsed.Data)
 	}
 }
