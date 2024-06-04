@@ -51,13 +51,44 @@ func (p *Packet) VersionString() string {
 func PacketFromType(t interface{}) (*Packet, error) {
 	rv := reflect.ValueOf(t)
 
-	if rv.Kind() != reflect.Struct {
-		return nil, errors.Join(InvalidType, errors.New(fmt.Sprintf("Could not create packet from type: %s", rv.Kind().String())))
-	}
-
-	data := getBytesFromStruct(rv)
+	data := getBytesFromValue(rv)
 
 	return PacketFromData(data)
+}
+
+func getBytesFromValue(v reflect.Value) []byte {
+	data := make([]byte, 0)
+	kind := v.Kind()
+
+	switch kind {
+	case reflect.Struct:
+		data = append(data, getBytesFromStruct(v)...)
+	case reflect.Slice, reflect.Array:
+		data = append(data, getBytesFromSliceOrArray(v)...)
+	case reflect.String:
+		b := []byte(v.String())
+		data = append(data, b...)
+	case reflect.Bool:
+		data = append(data, getBytesFromBool(v)...)
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		data = append(data, getBytesFromInt(v)...)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		data = append(data, getBytesFromUint(v)...)
+	default:
+		panic(errors.Join(InvalidType, errors.New(fmt.Sprintf("Could not get bytes from field of type: %s", v.Kind().String()))))
+	}
+
+	return data
+}
+
+func getBytesFromSliceOrArray(v reflect.Value) []byte {
+	data := make([]byte, 0)
+
+	for i := range v.Len() {
+		data = append(data, getBytesFromValue(v.Index(i))...)
+	}
+
+	return data
 }
 
 func getBytesFromStruct(v reflect.Value) []byte {
@@ -65,32 +96,24 @@ func getBytesFromStruct(v reflect.Value) []byte {
 
 	for i := range v.NumField() {
 		value := v.Field(i)
-		kind := value.Kind()
 
-		switch kind {
-		case reflect.Struct:
-			data = append(data, getBytesFromStruct(value)...)
-		case reflect.String:
-			b := []byte(value.String())
-			fmt.Println("num bytes in string: ", len(b))
-			data = append(data, b...)
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			data = append(data, getBytesFromInt(value)...)
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			data = append(data, getBytesFromUint(value)...)
-		default:
-			panic(errors.Join(InvalidType, errors.New(fmt.Sprintf("Could not get bytes from field of type: %s", value.Kind().String()))))
-		}
-
+		data = append(data, getBytesFromValue(value)...)
 	}
-	fmt.Println("num bytes in struct: ", len(data))
 
 	return data
 }
 
+func getBytesFromBool(v reflect.Value) []byte {
+	val := 0
+	if v.Bool() {
+		val = 1
+	}
+
+	return []byte{byte(val)}
+}
+
 func getBytesFromInt(v reflect.Value) []byte {
 	size := v.Type().Bits()
-	fmt.Println("num bytes in int: ", (size / 8))
 
 	switch size {
 	case 8:
@@ -98,17 +121,17 @@ func getBytesFromInt(v reflect.Value) []byte {
 	case 16:
 		{
 			val := int16(v.Int())
-			return []byte{byte(val >> 8), byte(val & 0x0f)}
+			return []byte{byte(val >> 8), byte(val)}
 		}
 	case 32:
 		{
 			val := int32(v.Int())
-			return []byte{byte(val >> 24), byte(val >> 16), byte(val >> 8), byte(val & 0x0f)}
+			return []byte{byte(val >> 24), byte(val >> 16), byte(val >> 8), byte(val)}
 		}
 	case 64:
 		{
 			val := v.Int()
-			return []byte{byte(val >> 56), byte(val >> 48), byte(val >> 40), byte(val >> 32), byte(val >> 24), byte(val >> 16), byte(val >> 8), byte(val & 0x0f)}
+			return []byte{byte(val >> 56), byte(val >> 48), byte(val >> 40), byte(val >> 32), byte(val >> 24), byte(val >> 16), byte(val >> 8), byte(val)}
 		}
 	default:
 		panic(fmt.Sprintf("Unreachable size of int in bits %d", size))
@@ -118,25 +141,23 @@ func getBytesFromInt(v reflect.Value) []byte {
 func getBytesFromUint(v reflect.Value) []byte {
 	size := v.Type().Bits()
 
-	fmt.Println("num bytes in uint: ", (size / 8))
-
 	switch size {
 	case 8:
 		return []byte{byte(v.Uint())}
 	case 16:
 		{
-			val := int16(v.Uint())
-			return []byte{byte(val >> 8), byte(val & 0x0f)}
+			val := uint16(v.Uint())
+			return []byte{byte(val >> 8), byte(val)}
 		}
 	case 32:
 		{
-			val := int32(v.Uint())
-			return []byte{byte(val >> 24), byte(val >> 16), byte(val >> 8), byte(val & 0x0f)}
+			val := uint32(v.Uint())
+			return []byte{byte(val >> 24), byte(val >> 16), byte(val >> 8), byte(val)}
 		}
 	case 64:
 		{
 			val := v.Uint()
-			return []byte{byte(val >> 56), byte(val >> 48), byte(val >> 40), byte(val >> 32), byte(val >> 24), byte(val >> 16), byte(val >> 8), byte(val & 0x0f)}
+			return []byte{byte(val >> 56), byte(val >> 48), byte(val >> 40), byte(val >> 32), byte(val >> 24), byte(val >> 16), byte(val >> 8), byte(val)}
 		}
 	default:
 		panic(fmt.Sprintf("Unreachable size of uint in bits %d", size))

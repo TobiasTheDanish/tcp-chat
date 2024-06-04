@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"unsafe"
 
 	"github.com/TobiasTheDanish/tcp-chat/shared"
 )
@@ -156,6 +157,9 @@ type testStruct struct {
 	data struct {
 		fame int16
 	}
+	bytes      []byte
+	truthTable [4]bool
+	intPtr     uintptr
 }
 
 func TestPacketFromType(t *testing.T) {
@@ -167,6 +171,9 @@ func TestPacketFromType(t *testing.T) {
 		}{
 			fame: -16,
 		},
+		bytes:      []byte{0, 1, 2},
+		truthTable: [4]bool{false, true, true, false},
+		intPtr:     40,
 	}
 	packet, err := shared.PacketFromType(test)
 	if err != nil {
@@ -175,6 +182,66 @@ func TestPacketFromType(t *testing.T) {
 
 	if packet == nil {
 		t.Error("Expected packet but got nil")
+	}
+
+	index := 0
+	for i := range len(test.name) {
+		if test.name[i] != packet.Data[index] {
+			t.Error(fmt.Sprintf("Error creating packet. At byte pos %d, expected %d, got %d", index, test.name[i], packet.Data[index]))
+		}
+		fmt.Printf("pos: %d, got: %d\n", index, packet.Data[index])
+
+		index += 1
+	}
+	for i := range 4 {
+		val := byte(test.age >> (8 * (3 - i)))
+		if val != packet.Data[index] {
+			t.Error(fmt.Sprintf("Error creating packet. At byte pos %d, expected %d, got %d", index, val, packet.Data[index]))
+		}
+		fmt.Printf("pos: %d, got: %d\n", index, packet.Data[index])
+
+		index += 1
+	}
+	dataFame := int16(packet.Data[index])<<8 | int16(packet.Data[index+1])
+	if test.data.fame != dataFame {
+		t.Error(fmt.Sprintf("Error creating packet. At byte pos %d, expected %d, got %d", index, test.data.fame, dataFame))
+	}
+	for i := range 2 {
+		val := byte(test.data.fame >> (8 * (1 - i)))
+		if val != packet.Data[index] {
+			t.Error(fmt.Sprintf("Error creating packet. At byte pos %d, expected %d, got %d", index, val, packet.Data[index]))
+		}
+		fmt.Printf("pos: %d, got: %d\n", index, packet.Data[index])
+
+		index += 1
+	}
+	for i := range len(test.bytes) {
+		if test.bytes[i] != packet.Data[index] {
+			t.Error(fmt.Sprintf("Error creating packet. At byte pos %d, expected %d, got %d", index, test.bytes[i], packet.Data[index]))
+		}
+		fmt.Printf("pos: %d, got: %d\n", index, packet.Data[index])
+		index += 1
+	}
+	for i := range len(test.truthTable) {
+		b := byte(0)
+		if test.truthTable[i] {
+			b = 1
+		}
+		if b != packet.Data[index] {
+			t.Error(fmt.Sprintf("Error creating packet. At byte pos %d, expected %d, got %d", index, b, packet.Data[index]))
+		}
+		fmt.Printf("pos: %d, got: %d\n", index, packet.Data[index])
+		index += 1
+	}
+	ptrSize := unsafe.Sizeof(test.intPtr)
+	for i := range ptrSize {
+		val := byte(test.intPtr >> (8 * ((ptrSize - 1) - i)))
+		if val != packet.Data[index] {
+			t.Error(fmt.Sprintf("Error creating packet. At byte pos %d, expected %d, got %d", index, val, packet.Data[index]))
+		}
+		fmt.Printf("pos: %d, got: %d\n", index, packet.Data[index])
+
+		index += 1
 	}
 
 	fmt.Println("DataLength: ", packet.Header.DataLength)
