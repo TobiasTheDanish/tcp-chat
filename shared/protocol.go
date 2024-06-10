@@ -15,8 +15,9 @@ const (
 )
 
 var (
-	InvalidVersion = errors.New("Invalid version.")
-	InvalidType    = errors.New("Invalid type.")
+	InvalidVersion  = errors.New("Invalid version.")
+	InvalidType     = errors.New("Invalid type.")
+	UnsupportedType = errors.New("Unsupported type.")
 )
 
 type PacketHeader struct {
@@ -50,6 +51,10 @@ func (p *Packet) VersionString() string {
 }
 
 func PacketFromType(t interface{}) (*Packet, error) {
+	if t == nil {
+		return PacketFromData([]byte{})
+	}
+
 	rv := reflect.ValueOf(t)
 
 	data, err := getBytesFromValue(rv)
@@ -84,7 +89,9 @@ func getBytesFromValue(v reflect.Value) ([]byte, error) {
 	case reflect.Float32, reflect.Float64:
 		data = getBytesFromFloat(v)
 	case reflect.Complex64, reflect.Complex128:
-
+		return nil, errors.Join(UnsupportedType, errors.New(fmt.Sprintf("Type %s is not currently supported", v.Kind().String())))
+	case reflect.Invalid:
+		return []byte{}, nil
 	default:
 		return data, errors.Join(InvalidType, errors.New(fmt.Sprintf("Could not get bytes from field of type: %s", v.Kind().String())))
 	}

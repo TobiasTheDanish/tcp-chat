@@ -369,6 +369,28 @@ func TestPacketFromPointer(t *testing.T) {
 	}
 }
 
+func TestPacketFromNilPointer(t *testing.T) {
+	var data *testStruct
+
+	data = nil
+
+	packet, err := shared.PacketFromType(data)
+	if err != nil {
+		t.Errorf("Did not expect error, but got: %s", err)
+		return
+	}
+
+	if packet == nil {
+		t.Error("Expected packet but got nil")
+		return
+	}
+
+	expectedDataLength := uint16(0)
+	if packet.Header.DataLength != expectedDataLength {
+		t.Errorf("Incorrect datalength, expected %d, got %d\n", expectedDataLength, packet.Header.DataLength)
+	}
+}
+
 func TestPacketFromFloat32(t *testing.T) {
 	data := float32(67000.123)
 
@@ -462,5 +484,16 @@ func TestPacketFromFloat64(t *testing.T) {
 }
 
 func TestPacketFromComplex128(t *testing.T) {
+	data := complex(3.14, 10)
 
+	packet, err := shared.PacketFromType(data)
+	if err == nil {
+		t.Errorf("Expected unsupported type error, but got none.")
+		return
+	}
+
+	if packet != nil {
+		t.Error("Expected nil, but got packet.")
+		return
+	}
 }
