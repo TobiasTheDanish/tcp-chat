@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 )
 
@@ -51,56 +52,75 @@ func (p *Packet) VersionString() string {
 func PacketFromType(t interface{}) (*Packet, error) {
 	rv := reflect.ValueOf(t)
 
-	data := getBytesFromValue(rv)
+	data, err := getBytesFromValue(rv)
+	if err != nil {
+		return nil, err
+	}
 
 	return PacketFromData(data)
 }
 
-func getBytesFromValue(v reflect.Value) []byte {
-	data := make([]byte, 0)
+func getBytesFromValue(v reflect.Value) ([]byte, error) {
+	var (
+		err  error
+		data []byte
+	)
 	kind := v.Kind()
-
 	switch kind {
 	case reflect.Struct:
-		data = append(data, getBytesFromStruct(v)...)
+		data, err = getBytesFromStruct(v)
 	case reflect.Slice, reflect.Array:
-		data = append(data, getBytesFromSliceOrArray(v)...)
+		data, err = getBytesFromSliceOrArray(v)
+	case reflect.Pointer, reflect.Interface:
+		data, err = getBytesFromValue(v.Elem())
 	case reflect.String:
-		b := []byte(v.String())
-		data = append(data, b...)
+		data = []byte(v.String())
 	case reflect.Bool:
-		data = append(data, getBytesFromBool(v)...)
+		data = getBytesFromBool(v)
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		data = append(data, getBytesFromInt(v)...)
+		data = getBytesFromInt(v)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		data = append(data, getBytesFromUint(v)...)
+		data = getBytesFromUint(v)
+	case reflect.Float32, reflect.Float64:
+		data = getBytesFromFloat(v)
+	case reflect.Complex64, reflect.Complex128:
+
 	default:
-		panic(errors.Join(InvalidType, errors.New(fmt.Sprintf("Could not get bytes from field of type: %s", v.Kind().String()))))
+		return data, errors.Join(InvalidType, errors.New(fmt.Sprintf("Could not get bytes from field of type: %s", v.Kind().String())))
 	}
 
-	return data
+	return data, err
 }
 
-func getBytesFromSliceOrArray(v reflect.Value) []byte {
+func getBytesFromSliceOrArray(v reflect.Value) ([]byte, error) {
 	data := make([]byte, 0)
 
 	for i := range v.Len() {
-		data = append(data, getBytesFromValue(v.Index(i))...)
+		b, err := getBytesFromValue(v.Index(i))
+		if err != nil {
+			return nil, err
+		}
+		data = append(data, b...)
 	}
 
-	return data
+	return data, nil
 }
 
-func getBytesFromStruct(v reflect.Value) []byte {
+func getBytesFromStruct(v reflect.Value) ([]byte, error) {
 	data := make([]byte, 0)
 
 	for i := range v.NumField() {
 		value := v.Field(i)
 
-		data = append(data, getBytesFromValue(value)...)
+		b, err := getBytesFromValue(value)
+		if err != nil {
+			return nil, err
+		}
+
+		data = append(data, b...)
 	}
 
-	return data
+	return data, nil
 }
 
 func getBytesFromBool(v reflect.Value) []byte {
@@ -157,6 +177,25 @@ func getBytesFromUint(v reflect.Value) []byte {
 	case 64:
 		{
 			val := v.Uint()
+			return []byte{byte(val >> 56), byte(val >> 48), byte(val >> 40), byte(val >> 32), byte(val >> 24), byte(val >> 16), byte(val >> 8), byte(val)}
+		}
+	default:
+		panic(fmt.Sprintf("Unreachable size of uint in bits %d", size))
+	}
+}
+
+func getBytesFromFloat(v reflect.Value) []byte {
+	size := v.Type().Bits()
+
+	switch size {
+	case 32:
+		{
+			val := math.Float32bits(float32(v.Float()))
+			return []byte{byte(val >> 24), byte(val >> 16), byte(val >> 8), byte(val)}
+		}
+	case 64:
+		{
+			val := math.Float64bits(v.Float())
 			return []byte{byte(val >> 56), byte(val >> 48), byte(val >> 40), byte(val >> 32), byte(val >> 24), byte(val >> 16), byte(val >> 8), byte(val)}
 		}
 	default:

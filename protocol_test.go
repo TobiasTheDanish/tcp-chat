@@ -3,7 +3,9 @@ package shared_test
 import (
 	"bufio"
 	"bytes"
+	"encoding/binary"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"unsafe"
@@ -154,34 +156,27 @@ func TestParsePacket(t *testing.T) {
 type testStruct struct {
 	name string
 	age  uint32
-	data struct {
-		fame int16
-	}
-	bytes      []byte
-	truthTable [4]bool
-	intPtr     uintptr
 }
 
-func TestPacketFromType(t *testing.T) {
+func TestPacketFromStruct(t *testing.T) {
 	test := testStruct{
 		name: "Tobias",
-		age:  14,
-		data: struct {
-			fame int16
-		}{
-			fame: -16,
-		},
-		bytes:      []byte{0, 1, 2},
-		truthTable: [4]bool{false, true, true, false},
-		intPtr:     40,
+		age:  3_000_000,
 	}
 	packet, err := shared.PacketFromType(test)
 	if err != nil {
 		t.Errorf("Did not expect error, but got: %s", err)
+		return
 	}
 
 	if packet == nil {
 		t.Error("Expected packet but got nil")
+		return
+	}
+
+	expectedDataLength := uint16(len(test.name) + int(unsafe.Sizeof(test.age)))
+	if packet.Header.DataLength != expectedDataLength {
+		t.Errorf("Incorrect datalength, expected %d, got %d\n", expectedDataLength, packet.Header.DataLength)
 	}
 
 	index := 0
@@ -189,19 +184,46 @@ func TestPacketFromType(t *testing.T) {
 		if test.name[i] != packet.Data[index] {
 			t.Error(fmt.Sprintf("Error creating packet. At byte pos %d, expected %d, got %d", index, test.name[i], packet.Data[index]))
 		}
-		fmt.Printf("pos: %d, got: %d\n", index, packet.Data[index])
 
 		index += 1
 	}
-	for i := range 4 {
+	for i := range unsafe.Sizeof(test.age) {
 		val := byte(test.age >> (8 * (3 - i)))
 		if val != packet.Data[index] {
 			t.Error(fmt.Sprintf("Error creating packet. At byte pos %d, expected %d, got %d", index, val, packet.Data[index]))
 		}
-		fmt.Printf("pos: %d, got: %d\n", index, packet.Data[index])
 
 		index += 1
 	}
+}
+
+type nestedTestStruct struct {
+	data struct {
+		fame int16
+	}
+}
+
+func TestPacketFromNestedStruct(t *testing.T) {
+	test := nestedTestStruct{
+		data: struct{ fame int16 }{fame: -345},
+	}
+	packet, err := shared.PacketFromType(test)
+	if err != nil {
+		t.Errorf("Did not expect error, but got: %s", err)
+		return
+	}
+
+	if packet == nil {
+		t.Error("Expected packet but got nil")
+		return
+	}
+	index := 0
+
+	expectedDataLength := uint16(unsafe.Sizeof(test.data.fame))
+	if packet.Header.DataLength != expectedDataLength {
+		t.Errorf("Incorrect datalength, expected %d, got %d\n", expectedDataLength, packet.Header.DataLength)
+	}
+
 	dataFame := int16(packet.Data[index])<<8 | int16(packet.Data[index+1])
 	if test.data.fame != dataFame {
 		t.Error(fmt.Sprintf("Error creating packet. At byte pos %d, expected %d, got %d", index, test.data.fame, dataFame))
@@ -211,38 +233,234 @@ func TestPacketFromType(t *testing.T) {
 		if val != packet.Data[index] {
 			t.Error(fmt.Sprintf("Error creating packet. At byte pos %d, expected %d, got %d", index, val, packet.Data[index]))
 		}
-		fmt.Printf("pos: %d, got: %d\n", index, packet.Data[index])
 
 		index += 1
 	}
-	for i := range len(test.bytes) {
-		if test.bytes[i] != packet.Data[index] {
-			t.Error(fmt.Sprintf("Error creating packet. At byte pos %d, expected %d, got %d", index, test.bytes[i], packet.Data[index]))
+}
+
+func TestPacketFromByteSlice(t *testing.T) {
+	data := []byte{1, 255, 42, 69}
+
+	packet, err := shared.PacketFromType(data)
+	if err != nil {
+		t.Errorf("Did not expect error, but got: %s", err)
+		return
+	}
+
+	if packet == nil {
+		t.Error("Expected packet but got nil")
+		return
+	}
+	index := 0
+
+	expectedDataLength := uint16(len(data))
+	if packet.Header.DataLength != expectedDataLength {
+		t.Errorf("Incorrect datalength, expected %d, got %d\n", expectedDataLength, packet.Header.DataLength)
+	}
+
+	for i := range len(data) {
+		if data[i] != packet.Data[index] {
+			t.Error(fmt.Sprintf("Error creating packet. At byte pos %d, expected %d, got %d", index, data[i], packet.Data[index]))
 		}
-		fmt.Printf("pos: %d, got: %d\n", index, packet.Data[index])
 		index += 1
 	}
-	for i := range len(test.truthTable) {
-		b := byte(0)
-		if test.truthTable[i] {
-			b = 1
+}
+
+func TestPacketFromArray(t *testing.T) {
+	truthTable := [4]bool{false, true, true, false}
+
+	packet, err := shared.PacketFromType(truthTable)
+	if err != nil {
+		t.Errorf("Did not expect error, but got: %s", err)
+		return
+	}
+
+	if packet == nil {
+		t.Error("Expected packet but got nil")
+		return
+	}
+	index := 0
+
+	expectedDataLength := uint16(len(truthTable))
+	if packet.Header.DataLength != expectedDataLength {
+		t.Errorf("Incorrect datalength, expected %d, got %d\n", expectedDataLength, packet.Header.DataLength)
+	}
+
+	for i := range len(truthTable) {
+		expected := byte(0)
+		if truthTable[i] {
+			expected = 1
 		}
-		if b != packet.Data[index] {
-			t.Error(fmt.Sprintf("Error creating packet. At byte pos %d, expected %d, got %d", index, b, packet.Data[index]))
+		if expected != packet.Data[index] {
+			t.Error(fmt.Sprintf("Error creating packet. At byte pos %d, expected %d, got %d", index, expected, packet.Data[index]))
 		}
-		fmt.Printf("pos: %d, got: %d\n", index, packet.Data[index])
 		index += 1
 	}
-	ptrSize := unsafe.Sizeof(test.intPtr)
+}
+
+func TestPacketFromUintPtr(t *testing.T) {
+	data := uintptr(3200879)
+
+	packet, err := shared.PacketFromType(data)
+	if err != nil {
+		t.Errorf("Did not expect error, but got: %s", err)
+		return
+	}
+
+	if packet == nil {
+		t.Error("Expected packet but got nil")
+		return
+	}
+	index := 0
+
+	ptrSize := unsafe.Sizeof(data)
+	expectedDataLength := uint16(ptrSize)
+	if packet.Header.DataLength != expectedDataLength {
+		t.Errorf("Incorrect datalength, expected %d, got %d\n", expectedDataLength, packet.Header.DataLength)
+	}
+
 	for i := range ptrSize {
-		val := byte(test.intPtr >> (8 * ((ptrSize - 1) - i)))
+		val := byte(data >> (8 * ((ptrSize - 1) - i)))
 		if val != packet.Data[index] {
 			t.Error(fmt.Sprintf("Error creating packet. At byte pos %d, expected %d, got %d", index, val, packet.Data[index]))
 		}
-		fmt.Printf("pos: %d, got: %d\n", index, packet.Data[index])
+
+		index += 1
+	}
+}
+
+func TestPacketFromPointer(t *testing.T) {
+	data := testStruct{
+		name: "Tobias",
+		age:  256,
+	}
+
+	packet, err := shared.PacketFromType(&data)
+	if err != nil {
+		t.Errorf("Did not expect error, but got: %s", err)
+		return
+	}
+
+	if packet == nil {
+		t.Error("Expected packet but got nil")
+		return
+	}
+
+	expectedDataLength := uint16(len(data.name) + int(unsafe.Sizeof(data.age)))
+	if packet.Header.DataLength != expectedDataLength {
+		t.Errorf("Incorrect datalength, expected %d, got %d\n", expectedDataLength, packet.Header.DataLength)
+	}
+
+	index := 0
+	for i := range len(data.name) {
+		if data.name[i] != packet.Data[index] {
+			t.Error(fmt.Sprintf("Error creating packet. At byte pos %d, expected %d, got %d", index, data.name[i], packet.Data[index]))
+		}
+
+		index += 1
+	}
+	for i := range unsafe.Sizeof(data.age) {
+		val := byte(data.age >> (8 * (3 - i)))
+		if val != packet.Data[index] {
+			t.Error(fmt.Sprintf("Error creating packet. At byte pos %d, expected %d, got %d", index, val, packet.Data[index]))
+		}
+
+		index += 1
+	}
+}
+
+func TestPacketFromFloat32(t *testing.T) {
+	data := float32(67000.123)
+
+	packet, err := shared.PacketFromType(data)
+	if err != nil {
+		t.Errorf("Did not expect error, but got: %s", err)
+		return
+	}
+
+	if packet == nil {
+		t.Error("Expected packet but got nil")
+		return
+	}
+	index := 0
+
+	ptrSize := unsafe.Sizeof(data)
+	expectedDataLength := uint16(ptrSize)
+	if packet.Header.DataLength != expectedDataLength {
+		t.Errorf("Incorrect datalength, expected %d, got %d\n", expectedDataLength, packet.Header.DataLength)
+	}
+	var buf bytes.Buffer
+	err = binary.Write(&buf, binary.BigEndian, float32(data))
+	if err != nil {
+		t.Errorf("binary.Write failed with error: %s", err)
+		return
+	}
+	expected := buf.Bytes()
+
+	actual := uint32(0)
+	for i := range ptrSize {
+		shiftVal := int32((8 * ((ptrSize - 1) - i)))
+		val := expected[i]
+		if val != packet.Data[index] {
+			t.Error(fmt.Sprintf("Error creating packet. At byte pos %d, expected %d, got %d", index, val, packet.Data[index]))
+		}
+		actual = (uint32(val) << shiftVal) | actual
 
 		index += 1
 	}
 
-	fmt.Println("DataLength: ", packet.Header.DataLength)
+	actualFloat := math.Float32frombits(actual)
+	if data != actualFloat {
+		t.Error(fmt.Sprintf("Error creating packet. Float value malformed. Expected %f, got %f\n", data, actualFloat))
+	}
+}
+
+func TestPacketFromFloat64(t *testing.T) {
+	data := float64(67000.123)
+
+	packet, err := shared.PacketFromType(data)
+	if err != nil {
+		t.Errorf("Did not expect error, but got: %s", err)
+		return
+	}
+
+	if packet == nil {
+		t.Error("Expected packet but got nil")
+		return
+	}
+	index := 0
+
+	ptrSize := unsafe.Sizeof(data)
+	expectedDataLength := uint16(ptrSize)
+	if packet.Header.DataLength != expectedDataLength {
+		t.Errorf("Incorrect datalength, expected %d, got %d\n", expectedDataLength, packet.Header.DataLength)
+	}
+	var buf bytes.Buffer
+	err = binary.Write(&buf, binary.BigEndian, data)
+	if err != nil {
+		t.Errorf("binary.Write failed with error: %s", err)
+		return
+	}
+	expected := buf.Bytes()
+
+	actual := uint64(0)
+	for i := range ptrSize {
+		shiftVal := int32((8 * ((ptrSize - 1) - i)))
+		val := expected[i]
+		if val != packet.Data[index] {
+			t.Error(fmt.Sprintf("Error creating packet. At byte pos %d, expected %d, got %d", index, val, packet.Data[index]))
+		}
+		actual = (uint64(val) << shiftVal) | actual
+
+		index += 1
+	}
+
+	actualFloat := math.Float64frombits(actual)
+	if data != actualFloat {
+		t.Error(fmt.Sprintf("Error creating packet. Float value malformed. Expected %f, got %f\n", data, actualFloat))
+	}
+}
+
+func TestPacketFromComplex128(t *testing.T) {
+
 }
