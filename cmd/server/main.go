@@ -27,11 +27,19 @@ func main() {
 	}
 
 	for p := range server.PChan {
-		fmt.Print(string(p.Data))
+		var msg Message
+		p.IntoType(&msg)
+
+		fmt.Printf("%s: %s\n", msg.Username, msg.Msg)
 		for _, conn := range server.Conns {
 			conn.Write(p.Encode())
 		}
 	}
+}
+
+type Message struct {
+	Username string
+	Msg      string
 }
 
 func handleConnection(conn net.Conn, c chan *shared.Packet) {
@@ -39,7 +47,11 @@ func handleConnection(conn net.Conn, c chan *shared.Packet) {
 	connIp := conn.LocalAddr().String()
 	reader := bufio.NewReader(conn)
 
-	packet, err := shared.PacketFromData([]byte("Welcome! What is your username?\n"))
+	welcome := Message{
+		Username: "Server",
+		Msg:      "Welcome! What is your username?",
+	}
+	packet, err := shared.PacketFromType(welcome)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -68,10 +80,13 @@ func handleConnection(conn net.Conn, c chan *shared.Packet) {
 			return
 		}
 
-		sentMessage := string(data.Data)
+		sentMessage := strings.Trim(string(data.Data), "\r\n \t")
 
-		message := fmt.Sprintf("%s > %s", username, sentMessage)
-		p, err := shared.PacketFromData([]byte(message))
+		message := Message{
+			Username: username,
+			Msg:      sentMessage,
+		}
+		p, err := shared.PacketFromType(message)
 		if err != nil {
 			fmt.Printf("ERROR: %s\n", err)
 			return

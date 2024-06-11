@@ -62,7 +62,9 @@ func (c *Client) SendBytes(bytes []byte) error {
 	return c.SendPacket(p)
 }
 
-func (c *Client) Listen() {
+type MessageHandler func(*shared.Packet)
+
+func (c *Client) Listen(handler MessageHandler) {
 	for {
 		// Read from the connection untill a new line is send
 		packet, err := c.ReadPacket()
@@ -72,6 +74,6 @@ func (c *Client) Listen() {
 		}
 
 		// Print the data read from the connection to the terminal
-		fmt.Print(string(packet.Data))
+		handler(packet)
 	}
 }

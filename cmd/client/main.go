@@ -4,8 +4,14 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/TobiasTheDanish/tcp-chat/shared"
 	"github.com/TobiasTheDanish/tcp-chat/tcp_client"
 )
+
+type Message struct {
+	Username string
+	Msg      string
+}
 
 func main() {
 
@@ -21,7 +27,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	go tcpClient.Listen()
+	go tcpClient.Listen(messageHandler)
 
 	for {
 		err := tcpClient.ReadSend(os.Stdin)
@@ -30,4 +36,11 @@ func main() {
 			return
 		}
 	}
+}
+
+func messageHandler(p *shared.Packet) {
+	var msg Message
+	p.IntoType(&msg)
+
+	fmt.Printf("%s: %s\n", msg.Username, msg.Msg)
 }
